@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# Data helper for the Omarchy ClickUp widget. Owns the API token, pagination
+# and grouping; the panel only renders what this prints.
+#
+# Modes:
+#   (no arguments)              fetch the dashboard as JSON
+#   --save-token                read a token from stdin, validate it, store it
+#   --set-status <id> <status>  move one task to another status
+#   --set-team <id>             remember which workspace to show
+set -uo pipefail
+
+API="https://api.clickup.com/api/v2"
+TOKEN_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/clickup-token"
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/clickup.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOKEN_URL="https://app.clickup.com/settings/apps"
+
+team_id=""
+status_order=""
+mode="fetch"
+task_id=""
+new_status=""
+
+usage() {
+  cat <<EOF
+Usage: omarchy-clickup-fetch [options]
+  --team <id>               show this workspace for one run, without saving it
+  --status-order <list>     comma-separated status names, first section first
+  --save-token              read the API token from stdin, validate, store it
+  --set-status <id> <name>  move a task to another status
+  --set-team <id>           remember which workspace to show
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --team) [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }; team_id=$2; shift 2 ;;
+    --status-order) [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }; status_order=$2; shift 2 ;;
+    --save-token) mode="save-token"; shift ;;
+    --set-status) [[ $# -ge 3 ]] || { echo "missing values for $1" >&2; exit 2; }; mode="set-status"; task_id=$2; new_status=$3; shift 3 ;;
+    --set-team) [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }; mode="set-team"; team_id=$2; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+command -v jq >/dev/null 2>&1 || {
+  printf '%s\n' '{"schemaVersion":1,"state":"error","message":"jq is required.","sections":[],"listStatuses":{},"warnings":[]}'
+  exit 0
+}
+command -v curl >/dev/null 2>&1 || {
+  printf '%s\n' '{"schemaVersion":1,"state":"error","message":"curl is required.","sections":[],"listStatuses":{},"warnings":[]}'
+  exit 0
+}
+
+emit_state() {
+  jq -n --arg state "$1" --arg message "$2" \
+    '{schemaVersion:1,state:$state,message:$message,fetchedAt:(now|todateiso8601),totalOpen:0,overdue:0,dueToday:0,currentSprint:"",sections:[],listStatuses:{},teamId:"",workspaces:[],warnings:[]}'
+}
+
+emit_result() { jq -n --arg state "$1" --arg message "$2" '{state:$state,message:$message}'; }
+
+# The token travels in a header, so it can surface in a curl error or in an
+# echoed request. Every message that reaches the UI goes through here first.
+redact() { sed -E 's/pk_[0-9]+_[A-Za-z0-9]+/[REDACTED]/g'; }
+
+tmp=$(mktemp -d) || { emit_state error "Could not prepare temporary storage."; exit 1; }
+trap 'rm -rf "$tmp"' EXIT
+
+token=""
+warnings=()
+
+# Passing the credential through curl's stdin config keeps it out of argv,
+# where any process on the machine could read it from ps.
+api() { # api <method> <path> [json-body] -> prints the HTTP status code
+  local method=$1 path=$2 body=${3:-}
+  local args=(-sS --globoff --max-time 25 -X "$method" -o "$tmp/body" -w '%{http_code}')
+  [[ -n $body ]] && args+=(-H 'Content-Type: application/json' -d "$body")
+  printf 'header = "Authorization: %s"\n' "$token" | curl "${args[@]}" -K - "$API$path" 2>"$tmp/err"
+}
+
+# ClickUp answers failures with {"err": "...", "ECODE": "..."}; fall back to
+# curl's own stderr when the body is not JSON at all (DNS, TLS, timeouts).
+api_error() { # api_error [body-file] [stderr-file]
+  local body=${1:-$tmp/body} err=${2:-$tmp/err} detail
+  detail=$(jq -r '.err // empty' "$body" 2>/dev/null)
+  [[ -n $detail ]] || detail=$(tr '\n' ' ' <"$err" 2>/dev/null | cut -c1-200)
+  printf '%s' "${detail:-request failed}" | redact
+}
+
+read_token() {
+  [[ -s $TOKEN_FILE ]] || return 1
+  token=$(tr -d '[:space:]' <"$TOKEN_FILE")
+  [[ -n $token ]]
+}
+
+# Which workspace to show. Not a secret, and separate from the widget settings
+# so the panel's picker owns it end to end instead of two places disagreeing.
+read_saved_team() {
+  [[ -s $CONFIG_FILE ]] || return 0
+  jq -r '.teamId // "" | tostring' "$CONFIG_FILE" 2>/dev/null
+}
+
+case "$mode" in
+  save-token)
+    # One line, not the whole stream: the caller stays correct whether or not
+    # it closes stdin after writing.
+    IFS= read -r raw_token || true
+    token=$(printf '%s' "${raw_token:-}" | tr -d '[:space:]')
+    if [[ -z $token ]]; then
+      emit_result error "No token given."
+      exit 1
+    fi
+    if [[ ! $token =~ ^pk_ ]]; then
+      emit_result error "ClickUp personal tokens start with pk_. Generate one at $TOKEN_URL."
+      exit 1
+    fi
+    code=$(api GET /user)
+    if [[ $code != 200 ]]; then
+      if [[ $code == 401 ]]; then
+        emit_result error "ClickUp rejected that token."
+      else
+        emit_result error "Could not reach ClickUp: $(api_error)"
+      fi
+      exit 1
+    fi
+    mkdir -p "$(dirname "$TOKEN_FILE")" || { emit_result error "Could not create $(dirname "$TOKEN_FILE")."; exit 1; }
+    (
+      umask 077
+      printf '%s\n' "$token" >"$TOKEN_FILE.new"
+    ) && mv "$TOKEN_FILE.new" "$TOKEN_FILE" || { emit_result error "Could not write $TOKEN_FILE."; exit 1; }
+    chmod 600 "$TOKEN_FILE"
+    emit_result ready "Connected as $(jq -r '.user.username // "your account"' "$tmp/body")."
+    exit 0
+    ;;
+  set-team)
+    read_token || { emit_result error "No ClickUp token stored yet."; exit 1; }
+    code=$(api GET /team)
+    [[ $code == 200 ]] || { emit_result error "Could not list workspaces: $(api_error)"; exit 1; }
+    if ! jq -e --arg id "$team_id" 'any(.teams[]?; (.id | tostring) == $id)' "$tmp/body" >/dev/null 2>&1; then
+      emit_result error "That workspace is not on your account."
+      exit 1
+    fi
+    name=$(jq -r --arg id "$team_id" '.teams[] | select((.id | tostring) == $id) | .name // $id' "$tmp/body")
+    mkdir -p "$(dirname "$CONFIG_FILE")" || { emit_result error "Could not create $(dirname "$CONFIG_FILE")."; exit 1; }
+    jq -n --arg id "$team_id" '{teamId: $id}' >"$CONFIG_FILE.new" \
+      && mv "$CONFIG_FILE.new" "$CONFIG_FILE" \
+      || { emit_result error "Could not write $CONFIG_FILE."; exit 1; }
+    emit_result ready "Showing $name."
+    exit 0
+    ;;
+  set-status)
+    read_token || { emit_result error "No ClickUp token stored yet."; exit 1; }
+    code=$(api PUT "/task/$task_id" "$(jq -nc --arg s "$new_status" '{status:$s}')")
+    if [[ $code == 200 ]]; then
+      emit_result ready "Moved to $new_status."
+    else
+      emit_result error "$(api_error)"
+      exit 1
+    fi
+    exit 0
+    ;;
+esac
+
+if ! read_token; then
+  emit_state unconfigured "Paste a ClickUp personal token to connect."
+  exit 0
+fi
+
+code=$(api GET /user)
+case "$code" in
+  200) ;;
+  401|403) emit_state auth-error "ClickUp rejected the stored token."; exit 0 ;;
+  429) emit_state rate-limited "ClickUp API rate limit reached."; exit 0 ;;
+  *) emit_state error "Could not reach ClickUp: $(api_error)"; exit 0 ;;
+esac
+uid=$(jq -r '.user.id // empty' "$tmp/body")
+[[ -n $uid ]] || { emit_state error "ClickUp returned no user id."; exit 0; }
+
+# The whole list travels to the panel, which renders it as a picker, so this
+# runs even when the workspace is already known.
+code=$(api GET /team)
+[[ $code == 200 ]] || { emit_state error "Could not list workspaces: $(api_error)"; exit 0; }
+workspaces=$(jq -c '[.teams[]? | {id: (.id | tostring), name: (.name // "")}]' "$tmp/body")
+[[ $(jq 'length' <<<"$workspaces") -gt 0 ]] || { emit_state error "Your account has no ClickUp workspace."; exit 0; }
+
+known() { jq -e --arg id "$1" 'any(.[]; .id == $id)' <<<"$workspaces" >/dev/null 2>&1; }
+if [[ -n $team_id ]] && ! known "$team_id"; then
+  emit_state error "Workspace $team_id is not on your account."
+  exit 0
+fi
+if [[ -z $team_id ]]; then
+  saved=$(read_saved_team)
+  if [[ -n $saved ]] && known "$saved"; then
+    team_id=$saved
+  else
+    team_id=$(jq -r '.[0].id' <<<"$workspaces")
+    [[ -n $saved ]] && warnings+=("The workspace you picked is no longer available. Showing $(jq -r '.[0].name' <<<"$workspaces").")
+  fi
+fi
+
+printf '[]\n' >"$tmp/tasks.json"
+page=0
+while :; do
+  code=$(api GET "/team/$team_id/task?page=$page&include_closed=false&subtasks=true&assignees[]=$uid")
+  if [[ $code != 200 ]]; then
+    warnings+=("tasks: $(api_error)")
+    break
+  fi
+  jq -s '.[0] + (.[1].tasks // [])' "$tmp/tasks.json" "$tmp/body" >"$tmp/tasks.next" \
+    && mv "$tmp/tasks.next" "$tmp/tasks.json" \
+    || { warnings+=("tasks: unreadable response"); break; }
+  [[ $(jq '(.tasks // []) | length' "$tmp/body") -lt 100 ]] && break
+  page=$((page + 1))
+  # ponytail: 2000 assigned open tasks is already past what a popup can show;
+  # raise this if someone ever hits it for real.
+  ((page > 20)) && { warnings+=("Stopped after 2000 tasks."); break; }
+done
+
+# One request per distinct list, all in flight at once. In series this was the
+# bulk of a refresh — seconds during which the panel could not act on a key —
+# and each curl still receives the credential on its own stdin, so nothing
+# lands in argv or in a subshell's environment.
+printf '{}\n' >"$tmp/statuses.json"
+mapfile -t list_ids < <(jq -r '[.[].list.id | select(. != null) | tostring] | unique[]' "$tmp/tasks.json")
+for list_id in "${list_ids[@]+"${list_ids[@]}"}"; do
+  printf 'header = "Authorization: %s"\n' "$token" \
+    | curl -sS --globoff --max-time 25 -K - \
+        -o "$tmp/list-$list_id.body" -w '%{http_code}' "$API/list/$list_id" \
+        >"$tmp/list-$list_id.code" 2>"$tmp/list-$list_id.err" &
+done
+wait
+
+for list_id in "${list_ids[@]+"${list_ids[@]}"}"; do
+  if [[ $(cat "$tmp/list-$list_id.code" 2>/dev/null) != 200 ]]; then
+    warnings+=("statuses for list $list_id: $(api_error "$tmp/list-$list_id.body" "$tmp/list-$list_id.err")")
+    continue
+  fi
+  jq -s --arg id "$list_id" \
+    '.[0] + {($id): [ (.[1].statuses // [])[] | {status, color, orderindex, type} ]}' \
+    "$tmp/statuses.json" "$tmp/list-$list_id.body" >"$tmp/statuses.next" \
+    && mv "$tmp/statuses.next" "$tmp/statuses.json"
+done
+
+now_ms=$(( $(date +%s) * 1000 ))
+day_start=$(( $(date -d 'today 00:00:00' +%s) * 1000 ))
+day_end=$(( $(date -d 'tomorrow 00:00:00' +%s) * 1000 - 1 ))
+
+jq -n --slurpfile tasks "$tmp/tasks.json" --slurpfile statuses "$tmp/statuses.json" \
+  '{tasks: $tasks[0], listStatuses: $statuses[0]}' >"$tmp/payload.json"
+
+if ! jq -c --argjson now "$now_ms" --argjson dayStart "$day_start" --argjson dayEnd "$day_end" \
+  --arg statusOrder "$status_order" -f "$SCRIPT_DIR/normalize.jq" "$tmp/payload.json" >"$tmp/model.json"; then
+  emit_state error "Could not read the ClickUp response."
+  exit 0
+fi
+
+warnings_json=$(printf '%s\n' "${warnings[@]+"${warnings[@]}"}" | jq -Rsc 'split("\n") | map(select(length > 0))')
+jq -c --argjson warnings "$warnings_json" --argjson workspaces "$workspaces" --arg teamId "$team_id" \
+  '. + {schemaVersion:1, state:"ready", message:"", fetchedAt:(now|todateiso8601), teamId:$teamId, workspaces:$workspaces, warnings:$warnings}' \
+  "$tmp/model.json"

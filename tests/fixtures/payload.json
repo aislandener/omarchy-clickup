@@ -1,0 +1,88 @@
+{
+  "tasks": [
+    {
+      "id": "aaa111",
+      "name": "Overdue task",
+      "url": "https://app.clickup.com/t/aaa111",
+      "status": { "status": "in progress", "color": "#d3af38", "type": "custom", "orderindex": 2 },
+      "date_updated": "1699500000000",
+      "due_date": "1699000000000",
+      "tags": [{ "name": "sprint 12" }, { "name": "bug" }],
+      "list": { "id": "111", "name": "Platform" },
+      "folder": { "id": "11", "name": "Acme", "hidden": false },
+      "space": { "id": "1" },
+      "assignees": [{ "id": 42, "username": "Someone" }]
+    },
+    {
+      "id": "bbb222",
+      "name": "Due today task",
+      "url": "https://app.clickup.com/t/bbb222",
+      "status": { "status": "in progress", "color": "#d3af38", "type": "custom", "orderindex": 2 },
+      "date_updated": "1699999000000",
+      "due_date": "1700000005000",
+      "tags": [],
+      "list": { "id": "111", "name": "Platform" },
+      "folder": { "id": "11", "name": "Acme", "hidden": false },
+      "space": { "id": "1" }
+    },
+    {
+      "id": "ccc333",
+      "name": "No due date",
+      "url": "https://app.clickup.com/t/ccc333",
+      "status": { "status": "in progress", "color": "#d3af38", "type": "custom", "orderindex": 2 },
+      "date_updated": "1699800000000",
+      "due_date": null,
+      "tags": [{ "name": "sprint 13📅" }],
+      "list": { "id": "222", "name": "Website" },
+      "folder": { "id": "0", "name": "hidden", "hidden": true },
+      "space": { "id": "1" }
+    },
+    {
+      "id": "ddd444",
+      "name": "Backlog item",
+      "url": "https://app.clickup.com/t/ddd444",
+      "status": { "status": "backlog", "color": "#87909e", "type": "open", "orderindex": 0 },
+      "date_updated": "1699700000000",
+      "due_date": null,
+      "tags": [],
+      "list": { "id": "111", "name": "Platform" },
+      "folder": { "id": "11", "name": "Acme", "hidden": false },
+      "space": { "id": "1" }
+    },
+    {
+      "id": "eee555",
+      "name": "Waiting item",
+      "url": "https://app.clickup.com/t/eee555",
+      "status": { "status": "waiting on client", "color": "#e05b5b", "type": "custom", "orderindex": 1 },
+      "date_updated": "1699600000000",
+      "due_date": null,
+      "tags": [],
+      "list": { "id": "333", "name": "Unreadable" },
+      "folder": { "id": "33", "name": "Other", "hidden": false },
+      "space": { "id": "1" }
+    },
+    {
+      "id": "fff666",
+      "name": "Review item",
+      "url": "https://app.clickup.com/t/fff666",
+      "status": { "status": "review", "color": "#5b9ae0", "type": "custom", "orderindex": 3 },
+      "date_updated": "1699650000000",
+      "due_date": null,
+      "tags": [],
+      "list": { "id": "111", "name": "Platform" },
+      "folder": { "id": "11", "name": "Acme", "hidden": false },
+      "space": { "id": "1" }
+    }
+  ],
+  "listStatuses": {
+    "111": [
+      { "status": "backlog", "color": "#87909e", "orderindex": 0, "type": "open" },
+      { "status": "in progress", "color": "#d3af38", "orderindex": 2, "type": "custom" },
+      { "status": "review", "color": "#5b9ae0", "orderindex": 3, "type": "custom" }
+    ],
+    "222": [
+      { "status": "backlog", "color": "#87909e", "orderindex": 0, "type": "open" },
+      { "status": "in progress", "color": "#d3af38", "orderindex": 2, "type": "custom" }
+    ]
+  }
+}

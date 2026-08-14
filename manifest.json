@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "aislandener.clickup",
+  "name": "ClickUp",
+  "version": "0.1.0",
+  "author": "Aislan Dener Souza Vicentini",
+  "license": "MIT",
+  "description": "Your assigned ClickUp tasks in the bar, grouped by workflow status, with one keystroke to move a task forward.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "ClickUp",
+    "description": "Open tasks assigned to you across the whole workspace, grouped by the status they sit in, with due dates, sprint tags and an inline status picker.",
+    "category": "Development",
+    "aliases": ["clickup", "tasks", "todo", "tarefas"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 600,
+      "statusOrder": "",
+      "maxRowsPerSection": 5
+    },
+    "schema": [
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 60, "max": 3600, "step": 60, "defaultValue": 600 },
+      { "key": "statusOrder", "type": "string", "label": "Section order", "defaultValue": "", "description": "Comma-separated status names, first to last. Leave empty to follow the order the statuses have in ClickUp itself." },
+      { "key": "maxRowsPerSection", "type": "integer", "label": "Rows shown per section", "min": 3, "max": 50, "step": 1, "defaultValue": 5, "description": "Collapsed size of each section. Every section can still be expanded to its full contents." }
+    ]
+  }
+}
