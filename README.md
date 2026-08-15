@@ -14,7 +14,25 @@ omarchy plugin add https://github.com/aislandener/omarchy-clickup.git --enable -
 Or by hand: drop this folder in `~/.config/omarchy/plugins/aislandener.clickup/`, then
 `omarchy-shell shell rescanPlugins` and `omarchy plugin enable aislandener.clickup right`.
 
-Requires `curl` and `jq`, both of which Omarchy already installs.
+Requires `curl` and `jq`, both of which Omarchy already installs. Nothing else: no
+runtime, no daemon, no account anywhere but ClickUp. The only host it talks to is
+`api.clickup.com`.
+
+## Remove it
+
+```bash
+omarchy plugin remove aislandener.clickup
+```
+
+That unloads the widget and deletes the plugin folder. The two files it wrote outside
+that folder are deliberately left alone, so removing the widget never silently discards
+a credential you may still want. Delete them yourself to revoke it:
+
+```bash
+rm -f ~/.config/omarchy/clickup-token ~/.config/omarchy/clickup.json
+```
+
+If you added the keybinding below, drop that line from `~/.config/hypr/bindings.lua`.
 
 ## Connect your account
 
@@ -35,6 +53,17 @@ umask 077 && op read "op://Private/ClickUp/api token" > ~/.config/omarchy/clicku
 ```
 
 "Change token" at the bottom of the panel brings the field back at any time.
+
+## What it writes
+
+| Path | Written when |
+|---|---|
+| `~/.config/omarchy/clickup-token` | you save a token in the panel, mode `600` |
+| `~/.config/omarchy/clickup.json` | you pick a workspace, and only the workspace id goes in it |
+
+Both only ever happen on an action you took in the panel. Nothing else on the machine is
+written: not your shell, Hyprland, theme or bar configuration. The keybinding below is a
+suggestion for you to add by hand, not something the plugin installs.
 
 ## Open it from the keyboard
 
