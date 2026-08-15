@@ -3,26 +3,12 @@
 Your assigned ClickUp tasks in the Omarchy bar, grouped by the status they sit in, with
 one keystroke to move a task forward. Everything renders with your current Omarchy theme.
 
-```
-┌─ ClickUp ─────────────────────────────┐
-│  32 open · 3 overdue · sprint 28📅    │
-│                                       │
-│  IN PROGRESS                    5/8   │
-│   MVP PED                             │
-│     Payments/Billing · due today · s28     │
-│   Validate certificates               │
-│     Storefront/Checkout · no due date · s28     │
-│                                       │
-│  PENDING DEPLOY                   2   │
-│  EXTERNAL REVIEW                  6   │
-│  BACKLOG                         15   │
-└───────────────────────────────────────┘
-```
+<img src="docs/panel.png" alt="The ClickUp panel, tasks grouped by status" width="420">
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-clickup.git --enable --yes
+omarchy plugin add https://github.com/aislandener/omarchy-clickup.git --enable --yes
 ```
 
 Or by hand: drop this folder in `~/.config/omarchy/plugins/aislandener.clickup/`, then
@@ -78,6 +64,14 @@ target only ever reaches one of those instances.
 
 Right-click a task row also opens the status picker; right-click the bar icon refreshes
 without opening the panel. Clicking a section's counter expands it to its full contents.
+
+<p>
+  <img src="docs/filter.png" alt="Filtering the task list" width="380">
+  <img src="docs/status.png" alt="The inline status picker on a task row" width="380">
+</p>
+
+The filter matches the name, the list, the folder, the status and the tags at once, and
+the status picker only offers the statuses that the task's own list actually has.
 
 ## How the grouping works
 

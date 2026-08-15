@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Io
 
 // ClickUp data service. The helper owns the token, pagination and grouping;
