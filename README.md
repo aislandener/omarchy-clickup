@@ -50,6 +50,20 @@ umask 077 && op read "op://Private/ClickUp/api token" > ~/.config/omarchy/clicku
 
 "Change token" at the bottom of the panel brings the field back at any time.
 
+## Open it from the keyboard
+
+The plugin ships no binding of its own. Add one to `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + CTRL + M", "ClickUp tasks", "omarchy-shell shell toggle aislandener.clickup")
+```
+
+Going through `shell toggle` rather than the plugin's own IPC target matters as soon as
+you have a second monitor: a bar widget is mounted once per screen, and a fixed IPC
+target only ever reaches one of those instances.
+
+`omarchy-shell aislandener.clickup refresh` refetches without opening anything.
+
 ## Keyboard
 
 | Key | Action |
