@@ -133,6 +133,20 @@ Panel {
     statusEditingId = String(selectedTask.id)
   }
 
+  // The same key stops the timer on the row that has it and starts it on any
+  // other; ClickUp stops the previous entry on its own.
+  function toggleTimer() {
+    if (!selectedTask || clickup.busy) return
+    cursorActive = true
+    if (clickup.isTimed(selectedTask.id)) clickup.stopTimer()
+    else clickup.startTimer(selectedTask.id)
+  }
+
+  function taskTitle(task) {
+    // nf-fa-clock_o
+    return (clickup.isTimed(task.id) ? "\uf017 " : "") + task.name
+  }
+
   function openUrl(url, keepOpen) {
     var value = String(url || "")
     if (value === "") return
@@ -185,8 +199,8 @@ Panel {
     return parts.join(" · ")
   }
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  implicitWidth: barItems.implicitWidth
+  implicitHeight: barItems.implicitHeight
 
   onOpenedChanged: {
     statusEditingId = ""
@@ -238,16 +252,31 @@ Panel {
     function status(): string { return clickup.state }
   }
 
-  BarIconButton {
-    id: button
-    anchors.fill: parent
-    bar: root.bar
-    // nf-fa-tasks
-    text: "\uf0ae"
-    active: clickup.alarming
-    onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) clickup.refresh()
-      else root.toggle()
+  function barPressed(buttonCode) {
+    if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) clickup.refresh()
+    else root.toggle()
+  }
+
+  // The elapsed time sits next to the icon only while a timer runs; an empty
+  // WidgetButton hides itself and takes no space.
+  Grid {
+    id: barItems
+    columns: root.bar && root.bar.vertical ? 1 : 2
+
+    BarIconButton {
+      id: button
+      bar: root.bar
+      // nf-fa-tasks
+      text: "\uf0ae"
+      active: clickup.alarming
+      onPressed: function(buttonCode) { root.barPressed(buttonCode) }
+    }
+
+    WidgetButton {
+      bar: root.bar
+      text: clickup.elapsedLabel(false)
+      tooltipText: clickup.timing ? String(clickup.timer.taskName || "") : ""
+      onPressed: function(buttonCode) { root.barPressed(buttonCode) }
     }
   }
 
@@ -273,6 +302,7 @@ Panel {
         if (text === "r" || text === "R") clickup.refresh()
         else if (text === "/") Qt.callLater(function() { search.forceActiveFocus() })
         else if (text === "s" || text === "S") root.editSelectedStatus()
+        else if (text === "t" || text === "T") root.toggleTimer()
       }
 
       Flickable {
@@ -319,6 +349,46 @@ Panel {
             font.pixelSize: Style.font.bodySmall
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
+          }
+
+          BorderSurface {
+            visible: !root.showingSetup && clickup.timing
+            width: parent.width
+            implicitHeight: Math.max(timerText.implicitHeight, stopButton.implicitHeight) + Style.space(16)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+            borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
+            radius: Style.cornerRadius
+
+            Text {
+              id: timerText
+              anchors.left: parent.left
+              anchors.right: stopButton.left
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(10)
+              anchors.rightMargin: Style.space(8)
+              text: clickup.timing
+                ? "\uf017  " + clickup.elapsedLabel(true) + " · " + String(clickup.timer.taskName || "")
+                : ""
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+
+            Button {
+              id: stopButton
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.rightMargin: Style.space(8)
+              text: "Stop"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              bordered: true
+              enabled: !clickup.busy
+              onClicked: clickup.stopTimer()
+            }
           }
 
           // Setup: the token never reaches this file's process arguments; the
@@ -477,7 +547,7 @@ Panel {
               id: hints
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              text: "↑↓ move · ↵ open · s status · / filter · r refresh"
+              text: "↑↓ move · ↵ open · s status · t timer · / filter"
               textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
@@ -587,7 +657,7 @@ Panel {
 
       Text {
         width: parent.width
-        text: rowItem.task.name
+        text: root.taskTitle(rowItem.task)
         textFormat: Text.PlainText
         color: rowItem.task.overdue ? root.urgent : rowItem.task.dueToday ? root.dueTodayColor : root.foreground
         font.family: root.fontFamily

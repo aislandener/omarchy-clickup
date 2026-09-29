@@ -86,6 +86,7 @@ target only ever reaches one of those instances.
 | `↑` `↓` | move between tasks |
 | `↵` | open the task in the browser |
 | `s` | change the status of the selected task |
+| `t` | start the timer on the selected task, or stop it if it is already running there |
 | `/` | filter by name, list, folder, status or tag |
 | `↵` in the filter | jump to the first match and take the keyboard back |
 | `r` | refresh now |
@@ -116,6 +117,14 @@ recognised as a sprint in any workspace that names its sprint tags that way.
 To pin your own order instead, fill in **Section order** in the widget settings, e.g.
 `in progress, pending deploy, external review, backlog`. Statuses you leave out still
 appear, after the ones you named.
+
+## Time tracking
+
+`t` on a task starts ClickUp's timer on it; `t` again stops it, and starting on another
+task switches to it. While a timer runs, the elapsed time sits next to the bar icon
+(hover it for the task name), and the panel shows it on top with a **Stop** button.
+
+A timer started elsewhere — the web app, the phone — shows up in the bar within a minute.
 
 ## Settings
 
