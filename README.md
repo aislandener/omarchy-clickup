@@ -86,6 +86,7 @@ target only ever reaches one of those instances.
 | `↑` `↓` | move between tasks |
 | `↵` | open the task in the browser |
 | `s` | change the status of the selected task |
+| `t` | start the timer on the selected task, or stop it if it is already running there |
 | `/` | filter by name, list, folder, status or tag |
 | `↵` in the filter | jump to the first match and take the keyboard back |
 | `r` | refresh now |
@@ -117,6 +118,14 @@ To pin your own order instead, fill in **Section order** in the widget settings,
 `in progress, pending deploy, external review, backlog`. Statuses you leave out still
 appear, after the ones you named.
 
+## Time tracking
+
+`t` on a task starts ClickUp's timer on it; `t` again stops it, and starting on another
+task switches to it. While a timer runs, the elapsed time sits next to the bar icon
+(hover it for the task name), and the panel shows it on top with a **Stop** button.
+
+A timer started elsewhere — the web app, the phone — shows up in the bar within a minute.
+
 ## Settings
 
 Setup > Plugins > ClickUp:
@@ -137,7 +146,13 @@ workspace the API returns is used.
 ## The bar icon
 
 Lights up in the theme's urgent colour when something assigned to you is past its due
-date. A full backlog is not news; a missed deadline is.
+date. A full backlog is not news; a missed deadline is. A due date without a time counts
+as overdue only once its day is over; one with a time, as soon as that time passes.
+Until then, work due today shows in the theme's yellow.
+
+ClickUp's API does not say whether a due date carries a time, so a due date at local
+midnight is read as date-only — which is how ClickUp stores those. A time set to exactly
+00:00 therefore reads as the whole day.
 
 ## Development
 

@@ -14,6 +14,9 @@ Item {
   property int totalOpen: 0
   property int overdue: 0
   property int dueToday: 0
+  // The running time entry: { taskId, taskName, start } or null.
+  property var timer: null
+  property double now: Date.now()
   property string currentSprint: ""
   property var sections: []
   property var listStatuses: ({})
@@ -41,8 +44,27 @@ Item {
   // Something already past its due date is the reason to light the bar icon;
   // a full backlog is not news.
   readonly property bool alarming: overdue > 0
+  readonly property bool timing: timer !== null && Number(timer.start) > 0
 
   signal tokenAccepted()
+
+  function elapsedLabel(withSeconds) {
+    if (!timing)
+      return "";
+
+    var total = Math.max(0, Math.floor((now - Number(timer.start)) / 1000));
+    var h = Math.floor(total / 3600);
+    var m = Math.floor(total / 60) % 60;
+    var label = h + ":" + (m < 10 ? "0" : "") + m;
+    if (withSeconds)
+      label += ":" + (total % 60 < 10 ? "0" : "") + (total % 60);
+
+    return label;
+  }
+
+  function isTimed(taskId) {
+    return timing && String(timer.taskId) === String(taskId);
+  }
 
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined;
@@ -88,6 +110,7 @@ Item {
       totalOpen = Number(data.totalOpen) || 0;
       overdue = Number(data.overdue) || 0;
       dueToday = Number(data.dueToday) || 0;
+      timer = data.timer && typeof data.timer === "object" ? data.timer : null;
       currentSprint = String(data.currentSprint || "");
       sections = Array.isArray(data.sections) ? data.sections : [];
       listStatuses = data.listStatuses && typeof data.listStatuses === "object" ? data.listStatuses : ({
@@ -106,10 +129,19 @@ Item {
   function setStatus(taskId, status) {
     var id = String(taskId || "");
     var next = String(status || "");
-    if (id === "" || next === "" || loading || fetchProcess.running || writeProcess.running)
+    if (id === "" || next === "")
       return ;
 
+    // A refresh in flight is no reason to drop the change: its result is
+    // superseded by the refresh this write queues. Only a write in flight is,
+    // and dropping one silently looked exactly like success.
     actionStatusTimer.stop();
+    if (writeProcess.running) {
+      actionStatus = "Still saving the previous change. Try again in a moment.";
+      actionStatusTimer.restart();
+      return ;
+    }
+
     actionStatus = "Moving to " + next + "…";
     _writeStdout = "";
     _writeStderr = "";
@@ -130,6 +162,40 @@ Item {
     writeProcess.savingToken = false;
     writeProcess.command = [helperPath(), "--set-team", next];
     writeProcess.running = true;
+  }
+
+  // Only another write is a conflict: a refresh in flight just lands a
+  // moment later, and the refresh after this write corrects it.
+  function runTimer(args, label) {
+    if (writeProcess.running)
+      return ;
+
+    actionStatusTimer.stop();
+    actionStatus = label;
+    _writeStdout = "";
+    _writeStderr = "";
+    writeProcess.savingToken = false;
+    writeProcess.command = [helperPath()].concat(teamId !== "" ? ["--team", teamId] : []).concat(args);
+    writeProcess.running = true;
+  }
+
+  function startTimer(taskId) {
+    if (String(taskId || "") !== "")
+      runTimer(["--timer-start", String(taskId)], "Starting the timer…");
+  }
+
+  function stopTimer() {
+    runTimer(["--timer-stop"], "Stopping the timer…");
+  }
+
+  // A timer started on the web or the phone shows up here within a minute,
+  // without paying for a full task refresh.
+  function pollTimer() {
+    if (timerProcess.running || tokenMissing || state !== "ready")
+      return ;
+
+    timerProcess.command = [helperPath()].concat(teamId !== "" ? ["--team", teamId] : []).concat(["--timer"]);
+    timerProcess.running = true;
   }
 
   // The token goes in over stdin, never in the argument list, where any
@@ -167,6 +233,22 @@ Item {
     running: true
     triggeredOnStart: true
     onTriggered: if (!root.holdRefresh) root.refresh()
+  }
+
+  Timer {
+    interval: 60000
+    repeat: true
+    running: true
+    onTriggered: root.pollTimer()
+  }
+
+  // Ticks only while something is being timed, for the elapsed label.
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.timing
+    triggeredOnStart: true
+    onTriggered: root.now = Date.now()
   }
 
   Timer {
@@ -253,8 +335,10 @@ Item {
       }
       savingToken = false;
       actionStatusTimer.restart();
-      // ClickUp is authoritative after every attempt, successful or not.
+      // ClickUp is authoritative after every attempt, successful or not. The
+      // timer poll answers in one request, well before the full refresh.
       root.refreshQueued = false;
+      Qt.callLater(root.pollTimer);
       Qt.callLater(root.refresh);
     }
 
@@ -270,6 +354,31 @@ Item {
 
       waitForEnd: true
       onStreamFinished: root._writeStderr = text
+    }
+
+  }
+
+  // A failed poll keeps the last known timer rather than blanking the bar;
+  // the next full refresh reports the error.
+  Process {
+    id: timerProcess
+
+    running: false
+    command: []
+
+    // Parsed here rather than in onExited: the stream can finish after the
+    // process does, and only a "ready" answer is trusted.
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var data = JSON.parse(String(text || ""));
+          if (data.state === "ready")
+            root.timer = data.timer && typeof data.timer === "object" ? data.timer : null;
+
+        } catch (error) {
+        }
+      }
     }
 
   }
