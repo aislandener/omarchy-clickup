@@ -106,10 +106,18 @@ Item {
   function setStatus(taskId, status) {
     var id = String(taskId || "");
     var next = String(status || "");
-    if (id === "" || next === "" || loading || fetchProcess.running || writeProcess.running)
+    if (id === "" || next === "")
       return ;
 
+    // A refresh in flight is no reason to drop the change: its result is
+    // superseded by the refresh this write queues. Only a write in flight is,
+    // and dropping one silently looked exactly like success.
     actionStatusTimer.stop();
+    if (writeProcess.running) {
+      actionStatus = "Still saving the previous change. Try again in a moment.";
+      actionStatusTimer.restart();
+      return ;
+    }
     actionStatus = "Moving to " + next + "…";
     _writeStdout = "";
     _writeStderr = "";

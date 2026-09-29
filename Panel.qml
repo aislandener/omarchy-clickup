@@ -21,6 +21,7 @@ Panel {
   property var expandedStatuses: ({})
   property bool cursorActive: false
   property int cursorIndex: 0
+  property string cursorId: ""
   property bool tokenView: false
   property string statusEditingId: ""
   // Tracks the picker's real popup rather than the intent to open one. Gating
@@ -80,12 +81,17 @@ Panel {
 
   function selectId(id) {
     for (var i = 0; i < cursorTargets.length; i++) {
-      if (String(cursorTargets[i].id) === String(id)) { cursorActive = true; cursorIndex = i; return }
+      if (String(cursorTargets[i].id) === String(id)) { cursorActive = true; cursorIndex = i; cursorId = String(id); return }
     }
   }
 
+  // The cursor follows the task, not the position: a status change moves the
+  // task to another section, and the index alone would land on a stranger.
   function ensureCursor() {
     if (cursorTargets.length === 0) { cursorIndex = 0; return }
+    for (var i = 0; i < cursorTargets.length; i++) {
+      if (cursorId !== "" && String(cursorTargets[i].id) === cursorId) { cursorIndex = i; return }
+    }
     cursorIndex = Math.max(0, Math.min(cursorIndex, cursorTargets.length - 1))
   }
 
@@ -93,6 +99,7 @@ Panel {
     cursorActive = true
     if (cursorTargets.length === 0) return
     cursorIndex = Math.max(0, Math.min(cursorTargets.length - 1, cursorIndex + delta))
+    cursorId = String(cursorTargets[cursorIndex].id)
   }
 
   function activateCursor() {
@@ -105,6 +112,7 @@ Panel {
   function focusList() {
     cursorActive = true
     cursorIndex = 0
+    cursorId = cursorTargets.length > 0 ? String(cursorTargets[0].id) : ""
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -113,7 +121,7 @@ Panel {
   // Activating the cursor first means the row about to change is the
   // highlighted one, rather than an undrawn default at the top of the list.
   function editSelectedStatus() {
-    if (!selectedTask || clickup.busy) return
+    if (!selectedTask) return
     // Pressing it again on the same row closes the picker, so the key is never
     // a dead end.
     if (statusEditingId === String(selectedTask.id)) { statusEditingId = ""; return }
@@ -178,6 +186,7 @@ Panel {
     if (opened) {
       cursorActive = false
       cursorIndex = 0
+      cursorId = ""
       tokenView = false
       if (panelFlick) panelFlick.contentY = 0
       clickup.refresh()
@@ -185,6 +194,10 @@ Panel {
     }
   }
   onCursorTargetsChanged: ensureCursor()
+  // The status picker takes focus and is destroyed with its row's Loader
+  // however it closes — chosen, dismissed or toggled off with `s` — leaving
+  // focus on nothing. Every one of those paths clears this id.
+  onStatusEditingIdChanged: if (statusEditingId === "" && opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
 
   Service {
     id: clickup
@@ -596,9 +609,13 @@ Panel {
               // Dismissed without choosing: give the keys back to the panel.
               else if (everOpened && root.statusEditingId === String(rowItem.task.id)) root.statusEditingId = ""
             }
+            // Clearing the id tears this dropdown down mid-handler, and rowItem
+            // is gone from scope after it, so everything is read first.
             onChanged: function(value) {
+              var id = String(rowItem.task.id)
+              var current = String(rowItem.task.status)
               root.statusEditingId = ""
-              if (value !== String(rowItem.task.status)) clickup.setStatus(rowItem.task.id, value)
+              if (value !== current) clickup.setStatus(id, value)
             }
           }
         }
