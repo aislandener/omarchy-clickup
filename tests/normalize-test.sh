@@ -5,7 +5,9 @@ set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-# Fixed clock so "overdue" and "due today" mean the same thing on every run.
+# Fixed clock and zone so "overdue" and "due today" mean the same thing on
+# every run. The zone matters: a due date at local midnight means date-only.
+export TZ=UTC
 NOW=1700000000000
 DAY_START=1699920000000
 DAY_END=1700006399999
@@ -45,6 +47,24 @@ check "dated work sorts ahead of undated, soonest first" \
 
 check "counts" "6/1/1" \
   "$(jq -r '"\(.totalOpen)/\(.overdue)/\(.dueToday)"' <<<"$out")"
+
+# "Due today task" is due at 22:13:25, five seconds after NOW.
+at() { # at <now> <due_date of "Due today task"> -> "overdue/dueToday/dueHasTime"
+  jq --arg due "$2" '.tasks |= map(if .name == "Due today task" then .due_date = $due else . end)' \
+    tests/fixtures/payload.json \
+    | jq -c --argjson now "$1" --argjson dayStart "$DAY_START" --argjson dayEnd "$DAY_END" \
+        --arg statusOrder "" -f normalize.jq \
+    | jq -r '.sections[].tasks[] | select(.name == "Due today task") | "\(.overdue)/\(.dueToday)/\(.dueHasTime)"'
+}
+
+check "date-only (midnight) is not overdue until the day ends" "false/true/false" \
+  "$(at "$DAY_END" "$DAY_START")"
+
+check "with a time, not overdue before it" "false/true/true" \
+  "$(at "$NOW" 1700000005000)"
+
+check "with a time, overdue once it passes, and no longer counted as due today" "true/false/true" \
+  "$(at "$DAY_END" 1700000005000)"
 
 check "section count matches its rows" "3" \
   "$(jq -r '.sections[] | select(.status == "in progress") | .count' <<<"$out")"

@@ -137,7 +137,13 @@ workspace the API returns is used.
 ## The bar icon
 
 Lights up in the theme's urgent colour when something assigned to you is past its due
-date. A full backlog is not news; a missed deadline is.
+date. A full backlog is not news; a missed deadline is. A due date without a time counts
+as overdue only once its day is over; one with a time, as soon as that time passes.
+Until then, work due today shows in the theme's yellow.
+
+ClickUp's API does not say whether a due date carries a time, so a due date at local
+midnight is read as date-only — which is how ClickUp stores those. A time set to exactly
+00:00 therefore reads as the whole day.
 
 ## Development
 

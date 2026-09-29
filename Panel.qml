@@ -14,6 +14,9 @@ Panel {
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
+  // The shell exposes no yellow, but every Omarchy theme's colors.toml names
+  // one (older themes as color3). The fallback only shows if neither exists.
+  property color dueTodayColor: "#e0af68"
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property string tokenUrl: "https://app.clickup.com/settings/apps"
 
@@ -151,6 +154,10 @@ Panel {
     var days = dayDelta(task.dueDate)
     if (days < -1) return (-days) + " days overdue"
     if (days === -1) return "1 day overdue"
+    if (days === 0 && task.dueHasTime) {
+      var time = Qt.formatTime(new Date(Number(task.dueDate)), "HH:mm")
+      return task.overdue ? "overdue since " + time : "due today at " + time
+    }
     if (days === 0) return "due today"
     if (days === 1) return "due tomorrow"
     if (days < 7) return "due in " + days + " days"
@@ -206,6 +213,17 @@ Panel {
     onTokenAccepted: {
       root.tokenView = false
       tokenField.text = ""
+    }
+  }
+
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var match = text().match(/^\s*(?:yellow|color3)\s*=\s*["'](#[0-9A-Fa-f]{6})["']/m)
+      if (match) root.dueTodayColor = match[1]
     }
   }
 
@@ -571,7 +589,7 @@ Panel {
         width: parent.width
         text: rowItem.task.name
         textFormat: Text.PlainText
-        color: rowItem.task.overdue ? root.urgent : root.foreground
+        color: rowItem.task.overdue ? root.urgent : rowItem.task.dueToday ? root.dueTodayColor : root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
         elide: Text.ElideRight
@@ -581,7 +599,7 @@ Panel {
         width: parent.width
         text: root.taskDetail(rowItem.task)
         textFormat: Text.PlainText
-        color: rowItem.task.overdue ? root.urgent : root.dim
+        color: rowItem.task.overdue ? root.urgent : rowItem.task.dueToday ? root.dueTodayColor : root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         elide: Text.ElideRight

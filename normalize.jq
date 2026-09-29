@@ -17,6 +17,12 @@ def sprint_number: capture("sprint[^0-9]*(?<n>[0-9]+)"; "i").n | tonumber;
 
 def norm:
   ((.due_date // null) | to_ms) as $due
+  # ClickUp leaves due_date_time null even when a time was picked, and stores
+  # a date-only due date at local midnight. So midnight means "the whole day",
+  # anything else is a deadline to the minute. ponytail: a time set to exactly
+  # 00:00 reads as date-only.
+  | ($due != null and ($due / 1000 | localtime | .[3] != 0 or .[4] != 0)) as $dueHasTime
+  | ($due != null and (if $dueHasTime then $due < $now else $due < $dayStart end)) as $overdue
   | (sprint_tags | sort_by(sprint_number) | last) as $sprintTag
   | {
       id: ((.id // "") | tostring),
@@ -30,8 +36,10 @@ def norm:
       status: ((.status.status // "") | ascii_downcase),
       statusColor: (.status.color // ""),
       dueDate: $due,
-      overdue: ($due != null and $due < $now),
-      dueToday: ($due != null and $due >= $dayStart and $due <= $dayEnd),
+      dueHasTime: $dueHasTime,
+      overdue: $overdue,
+      # Past its hour today is overdue, not also due today: counted once.
+      dueToday: ($due != null and $due >= $dayStart and $due <= $dayEnd and ($overdue | not)),
       sprint: (if $sprintTag == null then null else ($sprintTag | sprint_number) end),
       sprintLabel: ($sprintTag // ""),
       tags: [ (.tags // [])[] | .name // "" ],
