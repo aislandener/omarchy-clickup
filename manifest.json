@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "aislandener.clickup",
   "name": "ClickUp",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "author": "Aislan Dener Souza Vicentini",
   "license": "MIT",
   "description": "Your assigned ClickUp tasks in the bar, grouped by workflow status, with one keystroke to move a task forward.",
